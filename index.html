@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ubuntu 24.04 - Secure Shell</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Ubuntu', sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Ubuntu Wallpaper Gradient */
+        .desktop-bg {
+            background: linear-gradient(135deg, #2c001e 0%, #77216f 50%, #e95420 100%);
+            background-size: cover;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #2d2d2d; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4a4a4a; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555; 
+        }
+
+        /* Glassmorphism */
+        .glass {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .glass-light {
+            background: rgba(40, 40, 40, 0.95);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* Window Styling */
+        .window {
+            position: absolute;
+            border-radius: 8px 8px 0 0;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: opacity 0.2s, transform 0.2s;
+            min-width: 300px;
+            min-height: 200px;
+        }
+        
+        .window-header {
+            background: #1e1e1e;
+            color: #ddd;
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: default;
+            border-bottom: 1px solid #333;
+        }
+
+        .window-content {
+            flex-grow: 1;
+            background: #2c001e; /* Fallback */
+            overflow: auto;
+            position: relative;
+        }
+
+        /* Resizer Handle */
+        .resizer {
+            width: 15px;
+            height: 15px;
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            cursor: se-resize;
+            z-index: 50;
+        }
+        .resizer::after {
+            content: '';
+            position: absolute;
+            right: 3px;
+            bottom: 3px;
+            width: 6px;
+            height: 6px;
+            border-right: 2px solid #666;
+            border-bottom: 2px solid #666;
+        }
+
+        .terminal-text {
+            font-family: 'Fira Code', monospace;
+            color: #0f0;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            text-shadow: 0 0 2px rgba(0, 255, 0, 0.4);
+        }
+        
+        .cursor-blink {
+            animation: blink 1s step-end infinite;
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* Dock Icons */
+        .dock-icon {
+            transition: all 0.2s;
+            position: relative;
+        }
+        .dock-icon:hover {
+            transform: scale(1.1);
+            background: rgba(255,255,255,0.1);
+        }
+        .dock-dot {
+            position: absolute;
+            left: -4px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 4px;
+            background: #e95420;
+            border-radius: 50%;
+            opacity: 0;
+        }
+        .dock-icon.active .dock-dot {
+            opacity: 1;
+            height: 8px;
+        }
+
+        /* CRT Effect for Monitor */
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.1) 50%,
+                rgba(0,0,0,0.1)
+            );
+            background-size: 100% 4px;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.3;
+        }
+
+        /* Access Overlay */
+        .access-overlay {
+            position: fixed;
+            top: 0; left: 0; w-full; h-full;
+            width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        .access-box {
+            border: 4px solid;
+            padding: 40px 80px;
+            text-transform: uppercase;
+            font-weight: bold;
+            font-size: 4rem;
+            letter-spacing: 10px;
+            transform: scale(0.5);
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .granted {
+            color: #0f0;
+            border-color: #0f0;
+            box-shadow: 0 0 50px #0f0;
+            text-shadow: 0 0 20px #0f0;
+        }
+        .denied {
+            color: #f00;
+            border-color: #f00;
+            box-shadow: 0 0 50px #f00;
+            text-shadow: 0 0 20px #f00;
+        }
+
+        /* Decryptor Styles */
+        .decrypt-char {
+            display: inline-block;
+            width: 20px;
+            text-align: center;
+            font-family: 'Fira Code', monospace;
+        }
+        .decrypt-locked {
+            color: #0f0;
+            font-weight: bold;
+        }
+        .decrypt-spinning {
+            color: #33ff33;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body class="desktop-bg h-screen w-screen overflow-hidden text-gray-200">
+
+    <!-- CRT Overlay -->
+    <div class="scanlines"></div>
+
+    <!-- Access Overlay -->
+    <div id="access-overlay" class="access-overlay">
+        <div id="access-box" class="access-box">ACCESS GRANTED</div>
+    </div>
+
+    <!-- Top Bar -->
+    <div id="top-bar" class="fixed top-0 w-full h-8 glass flex justify-between items-center px-4 z-50 text-sm font-medium shadow-md">
+        <div class="flex items-center space-x-4">
+            <span class="hover:bg-white/10 px-2 py-1 rounded cursor-pointer transition">Activities</span>
+            <span id="active-app-name" class="font-bold">Terminal</span>
+        </div>
+        <div class="absolute left-1/2 transform -translate-x-1/2" id="clock">
+            Oct 24 10:00
+        </div>
+        <div class="flex items-center space-x-3">
+            <i class="fas fa-network-wired text-xs"></i>
+            <i class="fas fa-volume-up text-xs"></i>
+            <i class="fas fa-battery-three-quarters text-xs"></i>
+            <div class="flex items-center space-x-2 ml-2 hover:bg-white/10 px-2 py-1 rounded cursor-pointer">
+                <i class="fas fa-power-off text-xs"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Left Dock -->
+    <div id="dock" class="fixed left-0 top-8 bottom-0 w-16 glass flex flex-col items-center py-2 space-y-2 z-40 border-r border-white/5">
+        
+        <!-- Interactive Terminal Icon -->
+        <div class="dock-icon w-10 h-10 flex items-center justify-center rounded bg-gray-800 text-gray-200 cursor-pointer active" onclick="focusWindow('terminal'); createNotification('Input Mode', 'Keyboard captured for injection.')">
+            <div class="dock-dot"></div>
+            <i class="fas fa-keyboard text-xl"></i>
+        </div>
+
+        <!-- Auto Exec Terminal Icon -->
+        <div class="dock-icon w-10 h-10 flex items-center justify-center rounded text-purple-400 cursor-pointer active" onclick="focusWindow('terminal-exec')">
+            <div class="dock-dot"></div>
+            <i class="fas fa-terminal text-xl"></i>
+        </div>
+
+        <!-- Decryptor Icon -->
+        <div class="dock-icon w-10 h-10 flex items-center justify-center rounded text-red-500 cursor-pointer active" onclick="focusWindow('decryptor')">
+            <div class="dock-dot"></div>
+            <i class="fas fa-key text-xl"></i>
+        </div>
+
+        <!-- System Monitor Icon -->
+        <div class="dock-icon w-10 h-10 flex items-center justify-center rounded text-green-400 cursor-pointer active" onclick="focusWindow('sysmon')">
+            <div class="dock-dot"></div>
+            <i class="fas fa-chart-line text-xl"></i>
+        </div>
+
+        <!-- Access Control (Trigger) -->
+        <div class="dock-icon w-10 h-10 flex items-center justify-center rounded text-yellow-400 cursor-pointer" onclick="triggerAccess('denied')">
+            <div class="dock-dot"></div>
+            <i class="fas fa-shield-alt text-xl"></i>
+        </div>
+
+        <div class="flex-grow"></div>
+        
+        <!-- Apps -->
+        <div class="dock-icon w-10 h-10 flex items-center justify-center rounded text-gray-300 cursor-pointer mb-2">
+            <i class="fas fa-th text-xl"></i>
+        </div>
+    </div>
+
+    <!-- Desktop Area (Windows) -->
+    <div id="desktop-area" class="absolute top-8 left-16 right-0 bottom-0 relative">
+
+        <!-- 1. Interactive Terminal Window (Hacker Typer) -->
+        <div id="terminal" class="window glass-light" style="width: 700px; height: 400px; top: 30px; left: 30px; z-index: 10;">
+            <div class="window-header" onmousedown="startDrag(event, 'terminal')">
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-gray-400">root@ubuntu-server: ~ (Kernel Source)</span>
+                </div>
+                <div class="flex space-x-2">
+                    <div class="w-3 h-3 rounded-full bg-gray-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-gray-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-orange-600 cursor-pointer" onclick="closeWindow('terminal')"></div>
+                </div>
+            </div>
+            <div class="window-content bg-[#1e1e1e] p-2" onclick="document.getElementById('hidden-input').focus()">
+                <div id="terminal-output" class="terminal-text text-sm">
+                    <span class="text-gray-400"># Manual Override Terminal v2.1</span><br>
+                    <span class="text-green-500">root@ubuntu-server</span>:<span class="text-blue-500">~</span>$ <span class="animate-pulse">_</span><br>
+                </div>
+                <textarea id="hidden-input" class="absolute opacity-0 top-0 left-0 h-full w-full cursor-default"></textarea>
+            </div>
+            <div class="resizer" onmousedown="startResize(event, 'terminal')"></div>
+        </div>
+
+        <!-- 2. Command Execution Terminal (Real Input) -->
+        <div id="terminal-exec" class="window glass-light" style="width: 600px; height: 350px; top: 400px; left: 100px; z-index: 11;">
+            <div class="window-header" onmousedown="startDrag(event, 'terminal-exec')">
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-gray-400">root@kali: ~/exploits</span>
+                </div>
+                <div class="flex space-x-2">
+                    <div class="w-3 h-3 rounded-full bg-gray-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-gray-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-orange-600 cursor-pointer" onclick="closeWindow('terminal-exec')"></div>
+                </div>
+            </div>
+            <div class="window-content bg-[#000] p-2 font-mono text-xs text-green-600 overflow-hidden relative" onclick="document.getElementById('hidden-input-exec').focus()">
+                <div id="exec-output" class="flex flex-col min-h-full pb-2">
+                    <div class="text-gray-400 mb-2">Automated Exploit Sequence v4.0</div>
+                    <div>To run exploit: <span class="text-white">./autohack.sh</span></div>
+                    <!-- The input row is now an ID so we can toggle it -->
+                    <div id="input-row" class="mt-2 flex">
+                        <span class="text-blue-400 mr-2">root@kali:~/exploits$</span>
+                        <span id="exec-typed" class="text-white"></span>
+                        <span class="w-2 h-4 bg-gray-400 inline-block align-middle animate-pulse ml-1"></span>
+                    </div>
+                </div>
+                 <textarea id="hidden-input-exec" class="absolute opacity-0 top-0 left-0 h-full w-full cursor-default"></textarea>
+            </div>
+            <div class="resizer" onmousedown="startResize(event, 'terminal-exec')"></div>
+        </div>
+
+        <!-- 3. Password Decryptor (Manual Trigger) -->
+        <div id="decryptor" class="window glass-light" style="width: 450px; height: 300px; top: 50px; left: 800px; z-index: 12;">
+             <div class="window-header" onmousedown="startDrag(event, 'decryptor')">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-lock text-xs text-red-400"></i>
+                    <span class="text-xs text-gray-400">BruteForce Decryptor v9</span>
+                </div>
+                <div class="flex space-x-2">
+                    <div class="w-3 h-3 rounded-full bg-gray-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-gray-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-orange-600 cursor-pointer" onclick="closeWindow('decryptor')"></div>
+                </div>
+            </div>
+            <div class="window-content bg-[#111] p-6 flex flex-col items-center justify-center">
+                <div class="text-red-500 font-mono text-xs mb-4 w-full text-center tracking-widest">TARGET: FIREWALL_ROOT_KEY</div>
+                
+                <div id="password-display" class="bg-black border border-gray-700 p-4 rounded mb-4 flex space-x-1 min-w-[200px] justify-center">
+                    <span class="text-gray-500 tracking-widest">LOCKED</span>
+                </div>
+
+                <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden mb-4">
+                    <div id="decrypt-progress" class="bg-red-500 h-full w-0 transition-all duration-100"></div>
+                </div>
+                
+                <div class="flex justify-between w-full text-xs text-gray-500 mt-2 font-mono mb-4">
+                    <span id="decrypt-status">READY</span>
+                    <span id="decrypt-percent">0%</span>
+                </div>
+
+                <button onclick="startDecryptor()" class="bg-red-900 hover:bg-red-700 text-white font-bold py-2 px-6 rounded border border-red-500 text-xs tracking-wider transition-all">
+                    START ATTACK
+                </button>
+            </div>
+            <div class="resizer" onmousedown="startResize(event, 'decryptor')"></div>
+        </div>
+
+        <!-- 4. System Monitor Window -->
+        <div id="sysmon" class="window glass-light" style="width: 350px; height: 250px; top: 350px; left: 850px; z-index: 9;">
+            <div class="window-header" onmousedown="startDrag(event, 'sysmon')">
+                <span class="text-xs text-gray-400">System Monitor</span>
+                <div class="flex space-x-2">
+                    <div class="w-3 h-3 rounded-full bg-gray-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-gray-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-orange-600" onclick="closeWindow('sysmon')"></div>
+                </div>
+            </div>
+            <div class="window-content bg-[#1e1e1e] p-4 flex flex-col space-y-4">
+                <!-- CPU -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1 text-gray-400">
+                        <span>CPU Load</span>
+                        <span id="cpu-percent" class="text-orange-400 font-bold">12%</span>
+                    </div>
+                    <canvas id="cpu-chart" width="310" height="50" class="bg-[#111] rounded border border-gray-700 w-full"></canvas>
+                </div>
+                <!-- Memory -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1 text-gray-400">
+                        <span>RAM Usage</span>
+                        <span id="mem-percent">4.2 GiB</span>
+                    </div>
+                    <canvas id="mem-chart" width="310" height="50" class="bg-[#111] rounded border border-gray-700 w-full"></canvas>
+                </div>
+                <div class="text-xs font-mono text-gray-500 mt-1 flex justify-between">
+                    <span>NET: <span class="text-green-400">ACTIVE</span></span>
+                    <span>VPN: <span class="text-blue-400">Onion Route</span></span>
+                </div>
+            </div>
+            <div class="resizer" onmousedown="startResize(event, 'sysmon')"></div>
+        </div>
+
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification-area" class="fixed top-12 right-4 flex flex-col space-y-2 z-50"></div>
+
+    <script>
+        // --- 1. Window Management ---
+        let zIndexCounter = 20;
+
+        function focusWindow(id) {
+            const win = document.getElementById(id);
+            if (!win || win.style.display === 'none') {
+                if(win) win.style.display = 'flex';
+                if(win) win.style.opacity = '1';
+                if(win) win.style.transform = 'scale(1)';
+            }
+            if (!win) return;
+
+            zIndexCounter++;
+            win.style.zIndex = zIndexCounter;
+            
+            const titleMap = { 
+                'terminal': 'Input Terminal', 
+                'sysmon': 'System Monitor',
+                'terminal-exec': 'Auto-Script',
+                'decryptor': 'Decryption Tool'
+            };
+            document.getElementById('active-app-name').innerText = titleMap[id] || 'Ubuntu';
+            
+            if(id === 'terminal') document.getElementById('hidden-input').focus();
+            if(id === 'terminal-exec') document.getElementById('hidden-input-exec').focus();
+        }
+
+        function closeWindow(id) {
+            const win = document.getElementById(id);
+            win.style.opacity = '0';
+            win.style.transform = 'scale(0.9)';
+            setTimeout(() => win.style.display = 'none', 200);
+        }
+
+        // --- Dragging Logic ---
+        let dragItem = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        function startDrag(e, id) {
+            dragItem = document.getElementById(id);
+            focusWindow(id);
+            dragOffsetX = e.clientX - dragItem.getBoundingClientRect().left;
+            dragOffsetY = e.clientY - dragItem.getBoundingClientRect().top;
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+        }
+
+        function drag(e) {
+            if (!dragItem) return;
+            let x = e.clientX - dragOffsetX;
+            let y = e.clientY - dragOffsetY;
+            if(y < 32) y = 32; // Top bar constraint
+            dragItem.style.left = x + 'px';
+            dragItem.style.top = y + 'px';
+        }
+
+        function stopDrag() {
+            dragItem = null;
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', stopDrag);
+        }
+
+        // --- Resizing Logic ---
+        let resizeItem = null;
+        let initialWidth = 0;
+        let initialHeight = 0;
+        let initialMouseX = 0;
+        let initialMouseY = 0;
+
+        function startResize(e, id) {
+            e.stopPropagation(); // Prevent drag
+            resizeItem = document.getElementById(id);
+            focusWindow(id);
+            
+            initialWidth = resizeItem.offsetWidth;
+            initialHeight = resizeItem.offsetHeight;
+            initialMouseX = e.clientX;
+            initialMouseY = e.clientY;
+
+            document.addEventListener('mousemove', resize);
+            document.addEventListener('mouseup', stopResize);
+        }
+
+        function resize(e) {
+            if (!resizeItem) return;
+            const width = initialWidth + (e.clientX - initialMouseX);
+            const height = initialHeight + (e.clientY - initialMouseY);
+
+            resizeItem.style.width = Math.max(300, width) + 'px';
+            resizeItem.style.height = Math.max(200, height) + 'px';
+        }
+
+        function stopResize() {
+            resizeItem = null;
+            document.removeEventListener('mousemove', resize);
+            document.removeEventListener('mouseup', stopResize);
+        }
+
+
+        // --- 2. Interactive Typer (Terminal 1) ---
+        const codeBuffer = `
+struct group_info init_groups = { .usage = ATOMIC_INIT(2) };
+struct group_info *groups_alloc(int gidsetsize){
+    struct group_info *group_info;
+    int nblocks;
+    int i;
+    nblocks = (gidsetsize + NGROUPS_PER_BLOCK - 1) / NGROUPS_PER_BLOCK;
+    group_info = kmalloc(sizeof(*group_info) + nblocks*sizeof(gid_t *), GFP_USER);
+    if (!group_info) return NULL;
+    group_info->ngroups = gidsetsize;
+    group_info->nblocks = nblocks;
+    atomic_set(&group_info->usage, 1);
+    
+    // INJECTING SHELLCODE ...
+    // BYPASSING KERNEL PROTECTION
+    
+    if (gidsetsize <= NGROUPS_SMALL)
+        group_info->blocks[0] = group_info->small_block;
+    else {
+        for (i = 0; i < nblocks; i++) {
+            gid_t *b;
+            b = (void *)__get_free_page(GFP_USER);
+            if (!b) goto out_undo_partial_alloc;
+            group_info->blocks[i] = b;
+        }
+    }
+    return group_info;
+}
+`;
+        let codeIndex = 0;
+        const terminalOutput = document.getElementById('terminal-output');
+        const hiddenInput = document.getElementById('hidden-input');
+
+        hiddenInput.addEventListener('keydown', (e) => {
+            e.preventDefault();
+            if (e.key === 'Backspace') return;
+            
+            const chunkSize = Math.floor(Math.random() * 4) + 2;
+            let textToAdd = codeBuffer.substring(codeIndex, codeIndex + chunkSize);
+            if (codeIndex >= codeBuffer.length) {
+                codeIndex = 0;
+                textToAdd = "\n// --- NEXT PAYLOAD ---\n";
+            }
+            
+            // Simple syntax highlighting
+            textToAdd = textToAdd
+                .replace(/struct/g, '<span class="text-purple-400">struct</span>')
+                .replace(/int/g, '<span class="text-blue-400">int</span>')
+                .replace(/if/g, '<span class="text-yellow-400">if</span>')
+                .replace(/return/g, '<span class="text-red-400">return</span>')
+                .replace(/\/\/.*/g, '<span class="text-gray-500">$&</span>');
+
+            const span = document.createElement('span');
+            span.innerHTML = textToAdd;
+            terminalOutput.appendChild(span);
+            codeIndex += chunkSize;
+            
+            const contentDiv = document.querySelector('#terminal .window-content');
+            contentDiv.scrollTop = contentDiv.scrollHeight;
+        });
+
+        // --- 3. Auto Script Executor (Terminal 2 - REAL INPUT) ---
+        let autoScriptRunning = false;
+        let typedCommand = "";
+        
+        const hiddenInputExec = document.getElementById('hidden-input-exec');
+        const execTypedDisplay = document.getElementById('exec-typed');
+        const execOutput = document.getElementById('exec-output');
+        const inputRow = document.getElementById('input-row');
+        
+        hiddenInputExec.addEventListener('keydown', (e) => {
+             if(autoScriptRunning) {
+                 e.preventDefault();
+                 return;
+             }
+
+             if(e.key === 'Enter') {
+                 e.preventDefault();
+                 processCommand(typedCommand);
+                 typedCommand = "";
+                 execTypedDisplay.innerText = "";
+                 return;
+             }
+             
+             if(e.key === 'Backspace') {
+                 e.preventDefault();
+                 typedCommand = typedCommand.slice(0, -1);
+                 execTypedDisplay.innerText = typedCommand;
+                 return;
+             }
+             
+             if(e.key.length === 1) {
+                 e.preventDefault();
+                 typedCommand += e.key;
+                 execTypedDisplay.innerText = typedCommand;
+             }
+        });
+
+        function processCommand(cmd) {
+            // Echo command as a static line
+            const newline = document.createElement('div');
+            newline.innerHTML = `<span class="text-blue-400 mr-2">root@kali:~/exploits$</span>${cmd}`;
+            execOutput.insertBefore(newline, inputRow); 
+
+            // Hide the active input row to simulate "waiting"
+            inputRow.style.display = 'none';
+
+            if (cmd.trim() === './autohack.sh --flood') {
+                startAutoScript(true);
+            } else if (cmd.trim().startsWith('./autohack.sh')) {
+                startAutoScript(false);
+            } else if (cmd.trim() === 'clear') {
+                while (execOutput.children.length > 2) { 
+                    // Remove elements but keep the header (index 0) and the hidden input row (last child)
+                    // Actually, input row is at the end. 
+                    // Safe approach: remove everything between header and input row
+                    if(execOutput.children[1] !== inputRow) {
+                        execOutput.removeChild(execOutput.children[1]);
+                    } else {
+                        break;
+                    }
+                }
+                inputRow.style.display = 'flex'; // Restore prompt immediately
+            } else if (cmd.trim() !== "") {
+                const err = document.createElement('div');
+                err.className = "text-red-400 mb-1";
+                err.innerText = `bash: ${cmd.split(' ')[0]}: command not found`;
+                execOutput.insertBefore(err, inputRow);
+                inputRow.style.display = 'flex'; // Restore prompt immediately
+            } else {
+                inputRow.style.display = 'flex'; // Restore prompt immediately
+            }
+
+            // Scroll
+            const container = document.querySelector('#terminal-exec .window-content');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // --- Random Log Generators ---
+        function generateRandomFloodLog() {
+            const hex = Math.floor(Math.random() * 16777215).toString(16).toUpperCase().padStart(6, '0');
+            const ip = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+            const ports = [80, 443, 22, 21, 8080, 3306];
+            const port = ports[Math.floor(Math.random() * ports.length)];
+            
+            const logs = [
+                `<span class="text-gray-500">[DEBUG]</span> Heap alloc at 0x${hex}... OK`,
+                `<span class="text-blue-300">[NET]</span> Syn packet sent to ${ip}:${port}`,
+                `<span class="text-yellow-600">[WARN]</span> Buffer overflow attempt at memory block 0x${hex}`,
+                `<span class="text-gray-400">RAW:</span> ${hex} ${hex} ${hex} ${hex} <span class="text-red-900">PAYLOAD_ACK</span>`,
+                `<span class="text-purple-400">[INJECT]</span> Writing shellcode to stack...`,
+                `<span class="text-green-700">[TCP]</span> Handshake established with ${ip}`
+            ];
+            return logs[Math.floor(Math.random() * logs.length)];
+        }
+
+        function generateRandomErrorLog() {
+            const hex = Math.floor(Math.random() * 16777215).toString(16).toUpperCase().padStart(6, '0');
+            const ip = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+            const errs = [
+                `<span class="text-red-500">[ERR]</span> Connection refused by ${ip}`,
+                `<span class="text-gray-500">[TIMEOUT]</span> Packet ${hex} dropped`,
+                `<span class="text-yellow-600">[WARN]</span> Auth failed: Invalid Token`,
+                `<span class="text-red-400">[FAIL]</span> Buffer overflow denied at 0x${hex}`,
+                `<span class="text-blue-300">[NET]</span> Unreachable host`,
+                `<span class="text-gray-400">RAW:</span> ${hex} <span class="text-red-900">CORRUPT_HEADER</span>`
+            ];
+            return errs[Math.floor(Math.random() * errs.length)];
+        }
+
+        const preFloodMsgs = [
+            "[*] Initializing connection...",
+            "[+] Target found: 192.168.1.15",
+            "[*] Analysing vulnerability...",
+            "[!] Vulnerable service detected: HTTPD v2.4",
+            "[*] Preparing packet flood..."
+        ];
+
+        const postFloodMsgs = [
+            "[!] Firewall overloaded.",
+            "[*] Injecting root payload...",
+            "[+] Access Granted.",
+            "[*] Exfiltrating database..."
+        ];
+
+        const preFailMsgs = [
+            "[*] Initializing basic scan...",
+            "[*] Target found: 192.168.1.15",
+            "[*] Handshaking...",
+            "[-] Warning: Firewall detected."
+        ];
+
+        const postFailMsgs = [
+            "[-] Connection Refused.",
+            "[!] Critical Error: Integrity check failed.",
+            "[-] Exploit failed.",
+            "[*] Aborting sequence..."
+        ];
+
+        function startAutoScript(isSuccess) {
+            autoScriptRunning = true;
+            const container = document.querySelector('#terminal-exec .window-content');
+            
+            let phase = 0; // 0: Pre, 1: Flood, 2: Post
+            let counter = 0;
+            
+            const msgs = isSuccess ? preFloodMsgs : preFailMsgs;
+            const endMsgs = isSuccess ? postFloodMsgs : postFailMsgs;
+            
+            const interval = setInterval(() => {
+                let msg = "";
+
+                // Phase 0: Start
+                if (phase === 0) {
+                    if (counter >= msgs.length) {
+                        phase = 1;
+                        counter = 0;
+                        return; 
+                    }
+                    msg = msgs[counter++];
+                } 
+                // Phase 1: Flood (Success or Error)
+                else if (phase === 1) {
+                    for(let k=0; k<5; k++) {
+                        const floodDiv = document.createElement('div');
+                        floodDiv.className = "text-xs font-mono opacity-70 mb-0 leading-tight";
+                        floodDiv.innerHTML = isSuccess ? generateRandomFloodLog() : generateRandomErrorLog();
+                        execOutput.insertBefore(floodDiv, inputRow);
+                    }
+                    container.scrollTop = container.scrollHeight;
+                    
+                    counter++;
+                    // Fail flood is shorter than success flood
+                    if (counter > (isSuccess ? 30 : 15)) { 
+                        phase = 2;
+                        counter = 0;
+                    }
+                    return;
+                } 
+                // Phase 2: End
+                else if (phase === 2) {
+                    if (counter >= endMsgs.length) {
+                        finishScript(isSuccess);
+                        clearInterval(interval);
+                        return;
+                    }
+                    msg = endMsgs[counter++];
+                }
+
+                // Standard Log Printing
+                const div = document.createElement('div');
+                div.className = "mb-1";
+                if(msg.includes("[+]")) div.className += " text-green-400";
+                else if(msg.includes("[-]")) div.className += " text-red-400";
+                else if(msg.includes("[!]")) div.className += " text-yellow-400 font-bold";
+                else div.className += " text-blue-300";
+                
+                div.innerText = msg;
+                execOutput.insertBefore(div, inputRow);
+                container.scrollTop = container.scrollHeight;
+
+            }, (phase === 1) ? 50 : 800); // Fast interval during flood
+        }
+
+        function finishScript(isSuccess) {
+            autoScriptRunning = false;
+            const res = document.createElement('div');
+            res.className = isSuccess ? "text-green-500 font-bold mt-1" : "text-red-500 font-bold mt-1";
+            res.innerText = isSuccess ? ">> OPERATION SUCCESSFUL <<" : ">> OPERATION FAILED <<";
+            execOutput.insertBefore(res, inputRow);
+            
+            if(isSuccess) createNotification("System Hacked", "Root privileges acquired.");
+            else createNotification("Attack Failed", "Firewall rejected connection.");
+            
+            // Restore prompt
+            inputRow.style.display = 'flex';
+            
+            const container = document.querySelector('#terminal-exec .window-content');
+            container.scrollTop = container.scrollHeight;
+            
+            // Refocus input
+            document.getElementById('hidden-input-exec').focus();
+        }
+
+        // --- 4. Password Decryptor Visual (Manual) ---
+        let decryptInterval;
+        const targetPass = "X7-ALPHA-K9";
+        
+        function startDecryptor() {
+            if(decryptInterval) clearInterval(decryptInterval); // Reset if running
+            
+            const display = document.getElementById('password-display');
+            const progress = document.getElementById('decrypt-progress');
+            const status = document.getElementById('decrypt-status');
+            const perDisplay = document.getElementById('decrypt-percent');
+            
+            // Build placeholders
+            display.innerHTML = "";
+            for(let i=0; i<targetPass.length; i++) {
+                const s = document.createElement('span');
+                s.className = "decrypt-char decrypt-spinning";
+                s.innerText = "0";
+                display.appendChild(s);
+            }
+
+            let lockedCount = 0;
+            let currentPercent = 0;
+            status.innerText = "BRUTE FORCING...";
+            status.className = "text-red-400 animate-pulse";
+            progress.style.width = "0%";
+            progress.className = "bg-red-500 h-full transition-none";
+
+            decryptInterval = setInterval(() => {
+                const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+                const spans = document.querySelectorAll('.decrypt-char');
+                
+                spans.forEach((span, idx) => {
+                    if (!span.classList.contains('decrypt-locked')) {
+                        span.innerText = chars[Math.floor(Math.random() * chars.length)];
+                    }
+                });
+
+                if (Math.random() > 0.8 && lockedCount < targetPass.length) {
+                    spans[lockedCount].innerText = targetPass[lockedCount];
+                    spans[lockedCount].classList.remove('decrypt-spinning');
+                    spans[lockedCount].classList.add('decrypt-locked');
+                    lockedCount++;
+                    
+                    currentPercent = Math.floor((lockedCount / targetPass.length) * 100);
+                    progress.style.width = currentPercent + "%";
+                    perDisplay.innerText = currentPercent + "%";
+                }
+
+                if (lockedCount === targetPass.length) {
+                    clearInterval(decryptInterval);
+                    status.innerText = "DECRYPTION COMPLETE";
+                    status.className = "text-green-500 font-bold";
+                    progress.className = "bg-green-500 h-full transition-all duration-500";
+                    setTimeout(() => triggerAccess('granted'), 500);
+                }
+
+            }, 50);
+        }
+
+        // --- 5. Access Overlay System ---
+        function triggerAccess(type) {
+            const overlay = document.getElementById('access-overlay');
+            const box = document.getElementById('access-box');
+            
+            overlay.style.opacity = '1';
+            overlay.style.pointerEvents = 'auto'; // Block clicks
+            
+            box.classList.remove('granted', 'denied');
+            
+            if (type === 'granted') {
+                box.innerText = "ACCESS GRANTED";
+                box.classList.add('granted');
+            } else {
+                box.innerText = "ACCESS DENIED";
+                box.classList.add('denied');
+            }
+
+            requestAnimationFrame(() => {
+                box.style.transform = 'scale(1)';
+            });
+
+            setTimeout(() => {
+                box.style.transform = 'scale(0.5)';
+                overlay.style.opacity = '0';
+                overlay.style.pointerEvents = 'none';
+            }, 2500);
+        }
+
+        // --- 6. System Monitor Graphs ---
+        class LineGraph {
+            constructor(canvasId, color) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                // Handle dynamic resize? We grab initial size. 
+                // A better approach for real resize would be ResizeObserver, but keeping it simple.
+                // We'll rely on the canvas internal size not changing, just CSS stretching slightly, or use a fixed logic.
+                // For this sim, simpler is better:
+                this.width = this.canvas.width;
+                this.height = this.canvas.height;
+                this.data = new Array(Math.floor(this.width / 4)).fill(this.height);
+                this.color = color;
+            }
+
+            update(value) {
+                this.data.shift();
+                const y = this.height - (value / 100 * this.height);
+                this.data.push(y);
+                this.draw();
+            }
+
+            draw() {
+                this.ctx.clearRect(0, 0, this.width, this.height);
+                this.ctx.beginPath();
+                this.ctx.strokeStyle = this.color;
+                this.ctx.lineWidth = 1.5;
+                for (let i = 0; i < this.data.length; i++) {
+                    const x = i * 4;
+                    const y = this.data[i];
+                    if (i === 0) this.ctx.moveTo(x, y); else this.ctx.lineTo(x, y);
+                }
+                this.ctx.stroke();
+                this.ctx.lineTo(this.width, this.height);
+                this.ctx.lineTo(0, this.height);
+                this.ctx.fillStyle = this.color.replace('1)', '0.1)');
+                this.ctx.fill();
+            }
+        }
+
+        const cpuGraph = new LineGraph('cpu-chart', 'rgba(233, 84, 32, 1)');
+        const memGraph = new LineGraph('mem-chart', 'rgba(120, 50, 200, 1)');
+
+        setInterval(() => {
+            const time = Date.now() / 1000;
+            const cpuVal = Math.min(100, Math.max(0, 30 + Math.sin(time) * 20 + Math.random() * 40));
+            const memVal = 40 + Math.random() * 5;
+            cpuGraph.update(cpuVal);
+            memGraph.update(memVal);
+            document.getElementById('cpu-percent').innerText = Math.round(cpuVal) + '%';
+        }, 100);
+
+        // --- 7. Clock & Notifications ---
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleDateString('en-US', { 
+                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false 
+            }).replace(',', '');
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function createNotification(title, message) {
+            const area = document.getElementById('notification-area');
+            const toast = document.createElement('div');
+            toast.className = "bg-[#2d2d2d] text-white p-3 rounded shadow-lg border-l-4 border-orange-500 w-64 transform transition-all duration-300 translate-x-full opacity-0 mb-2";
+            toast.innerHTML = `<h4 class="font-bold text-sm text-orange-400">${title}</h4><p class="text-xs text-gray-300">${message}</p>`;
+            area.appendChild(toast);
+            setTimeout(() => toast.classList.remove('translate-x-full', 'opacity-0'), 10);
+            setTimeout(() => {
+                toast.classList.add('translate-x-full', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Initial Focus
+        document.getElementById('hidden-input').focus();
+        setTimeout(() => createNotification("Daemon Started", "Encrypted connection established."), 1000);
+
+    </script>
+</body>
+</html>
